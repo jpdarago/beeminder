@@ -1,32 +1,65 @@
+// Command line interface for the Beeminder REST API.
+// Allows shell scripting of Beeminder for usecases such as custom goal reminders or adding data
+// points through cron.
+use chrono::naive::NaiveDate;
 use chrono::serde::ts_seconds;
 use chrono::DateTime;
 use chrono::Utc;
 use log::info;
 use serde::Deserialize;
 use serde::Serialize;
+use std::io::prelude::*;
 use structopt::StructOpt;
+
+use regex::Regex;
 
 #[derive(StructOpt)]
 enum GoalCommand {
-    #[structopt(name = "list")]
+    #[structopt(name = "list", about = "List all goals of a user")]
     List,
-    #[structopt(name = "info")]
+    #[structopt(name = "info", about = "List information about a goal")]
     Info { goal: String },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PutDatapoint {
+    value: f64,
+    daystamp: NaiveDate,
+    comment: Option<String>,
 }
 
 #[derive(StructOpt)]
 enum DatapointCommand {
-    #[structopt(name = "info")]
+    #[structopt(name = "list", about = "List datapoints of a goal")]
     List { goal: String },
+    #[structopt(name = "create", about = "Create a datapoint from CLI flags")]
+    Create {
+        goal: String,
+        #[structopt(short = "-v", long)]
+        value: f64,
+        #[structopt(short = "-t", long)]
+        timestamp: Option<u64>,
+        #[structopt(short = "-d", long)]
+        daystamp: Option<String>,
+        #[structopt(short = "-c", long)]
+        comment: Option<String>,
+        #[structopt(short = "-i", long)]
+        request_id: Option<String>,
+    },
+    #[structopt(name = "put", about = "Create datapoints from STDIN")]
+    Put { goal: String },
 }
 
 #[derive(StructOpt)]
 enum Command {
-    #[structopt(name = "user")]
+    #[structopt(name = "user", about = "Relates to Beeminder user")]
     User,
-    #[structopt(name = "goal")]
+    #[structopt(name = "goal", about = "Relates to goals of a Beeminder user")]
     Goal(GoalCommand),
-    #[structopt(name = "datapoint")]
+    #[structopt(
+        name = "datapoint",
+        about = "Related to datapoints of a Beeminder user"
+    )]
     Datapoint(DatapointCommand),
 }
 
@@ -176,6 +209,62 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .await?;
                 let datapoints: Vec<Datapoint> = response.json().await?;
                 println!("{:?}", datapoints);
+            }
+            DatapointCommand::Create {
+                goal,
+                value,
+                timestamp,
+                daystamp,
+                comment,
+                request_id,
+            } => {
+                let mut params = vec![];
+                params.push(("value", value.to_string()));
+                if let Some(t) = timestamp {
+                    params.push(("timestamp", t.to_string()));
+                }
+                if let Some(d) = daystamp {
+                    params.push(("daystamp", d.to_string()));
+                }
+                if let Some(c) = comment {
+                    params.push(("comment", c));
+                }
+                if let Some(r) = request_id {
+                    params.push(("requestid", r));
+                }
+                client
+                    .post(url.build(&format!("/goals/{}/datapoints.json", goal)))
+                    .form(&params)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .header(reqwest::header::ACCEPT, "application/json")
+                    .send()
+                    .await?;
+            }
+            DatapointCommand::Put { goal } => {
+                let bytes = std::io::stdin()
+                    .bytes()
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                let input = std::str::from_utf8(&bytes)?;
+                let regex =
+                    Regex::new(r"(\d{4}-\d{2}-\d{2}) ([0-9]+(\.[0-9]+)?)( '([^']+)')?").unwrap();
+                let mut points = vec![];
+                for line in input.lines() {
+                    match regex.captures(line) {
+                        Some(captures) => {
+                            println!("{} -- {:?}", line, captures);
+                            points.push(PutDatapoint {
+                                daystamp: NaiveDate::parse_from_str(
+                                    captures.get(1).unwrap().as_str(),
+                                    "%Y-%m-%d",
+                                )?,
+                                value: captures.get(2).unwrap().as_str().parse::<f64>().unwrap(),
+                                comment: captures.get(5).map(|m| m.as_str().to_string()),
+                            });
+                        }
+                        None => panic!("Invalid line"),
+                    }
+                }
+                println!("Points {:?}", points);
             }
         },
     }
