@@ -1,17 +1,18 @@
 // Command line interface for the Beeminder REST API.
 // Allows shell scripting of Beeminder for usecases such as custom goal reminders or adding data
 // points through cron.
-use chrono::naive::NaiveDate;
+use anyhow::bail;
+use anyhow::Result;
+use chrono::naive::NaiveDateTime;
 use chrono::serde::ts_seconds;
 use chrono::DateTime;
 use chrono::Utc;
 use log::info;
+use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
 use std::io::prelude::*;
 use structopt::StructOpt;
-
-use regex::Regex;
 
 #[derive(StructOpt)]
 enum GoalCommand {
@@ -19,13 +20,6 @@ enum GoalCommand {
     List,
     #[structopt(name = "info", about = "List information about a goal")]
     Info { goal: String },
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct PutDatapoint {
-    value: f64,
-    daystamp: NaiveDate,
-    comment: Option<String>,
 }
 
 #[derive(StructOpt)]
@@ -163,8 +157,38 @@ struct Datapoint {
     requestid: Option<String>,
 }
 
+fn datapoints_from_stdin(goal: &str) -> Result<Vec<Datapoint>> {
+    let bytes = std::io::stdin().bytes().collect::<Result<Vec<_>, _>>()?;
+    let input = std::str::from_utf8(&bytes)?;
+    let regex =
+        Regex::new(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) ([0-9]+(\.[0-9]+)?)( '([^']+)')?")
+            .unwrap();
+    let mut points = vec![];
+    for line in input.lines() {
+        match regex.captures(line) {
+            Some(captures) => {
+                let daystamp = NaiveDateTime::parse_from_str(
+                    captures.get(1).unwrap().as_str(),
+                    "%Y-%m-%d %H:%M:%S",
+                )?;
+                points.push(Datapoint {
+                    id: format!("beeminder {} {}", goal, daystamp),
+                    timestamp: DateTime::from_utc(daystamp, Utc),
+                    daystamp: daystamp.format("%Y%m%d").to_string(),
+                    value: captures.get(2).unwrap().as_str().parse::<f64>().unwrap(),
+                    comment: captures.get(5).map(|m| m.as_str().to_string()),
+                    requestid: None,
+                    updated_at: Utc::now(),
+                });
+            }
+            None => bail!("Invalid line: {}", line),
+        }
+    }
+    Ok(points)
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     env_logger::init();
     let args = Cli::from_args();
     let url = BeeminderUrl::new(
@@ -178,17 +202,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("Retrieving user data from Beeminder");
             let response = client.get(url.build(".json")).send().await?;
             let user: User = response.json().await?;
-            println!("{:?}", user);
+            println!("{}", serde_json::to_string(&user).unwrap());
         }
         Command::Goal(cmd) => match cmd {
             GoalCommand::List => {
-                info!("Retrieving goal data from Beeminder");
+                info!("Retrieving goals from Beeminder");
                 let response = client
                     .get(url.build(&format!("/goals.json")))
                     .send()
                     .await?;
                 let goal: Vec<Goal> = response.json().await?;
-                println!("{:?}", goal);
+                println!("{}", serde_json::to_string(&goal).unwrap());
             }
             GoalCommand::Info { goal } => {
                 info!("Retrieving goal data from Beeminder");
@@ -197,7 +221,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .send()
                     .await?;
                 let goal: Goal = response.json().await?;
-                println!("{:?}", goal);
+                println!("{}", serde_json::to_string(&goal).unwrap());
             }
         },
         Command::Datapoint(cmd) => match cmd {
@@ -208,7 +232,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .send()
                     .await?;
                 let datapoints: Vec<Datapoint> = response.json().await?;
-                println!("{:?}", datapoints);
+                println!("{}", serde_json::to_string(&datapoints).unwrap());
             }
             DatapointCommand::Create {
                 goal,
@@ -218,6 +242,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 comment,
                 request_id,
             } => {
+                info!("Creating new data point");
                 let mut params = vec![];
                 params.push(("value", value.to_string()));
                 if let Some(t) = timestamp {
@@ -241,30 +266,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .await?;
             }
             DatapointCommand::Put { goal } => {
-                let bytes = std::io::stdin()
-                    .bytes()
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                let input = std::str::from_utf8(&bytes)?;
-                let regex =
-                    Regex::new(r"(\d{4}-\d{2}-\d{2}) ([0-9]+(\.[0-9]+)?)( '([^']+)')?").unwrap();
-                let mut points = vec![];
-                for line in input.lines() {
-                    match regex.captures(line) {
-                        Some(captures) => {
-                            println!("{} -- {:?}", line, captures);
-                            points.push(PutDatapoint {
-                                daystamp: NaiveDate::parse_from_str(
-                                    captures.get(1).unwrap().as_str(),
-                                    "%Y-%m-%d",
-                                )?,
-                                value: captures.get(2).unwrap().as_str().parse::<f64>().unwrap(),
-                                comment: captures.get(5).map(|m| m.as_str().to_string()),
-                            });
-                        }
-                        None => panic!("Invalid line"),
-                    }
-                }
-                println!("Points {:?}", points);
+                info!("Creating several datapoints");
+                let points = datapoints_from_stdin(&goal)?;
+                client
+                    .post(url.build(&format!("/goals/{}/datapoints/create_all.json", goal)))
+                    .form(&[("datapoints", serde_json::to_string(&points).unwrap())])
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .header(reqwest::header::ACCEPT, "application/json")
+                    .send()
+                    .await?;
             }
         },
     }

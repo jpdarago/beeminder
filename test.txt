@@ -1,0 +1,2 @@
+2022-01-01 10:00:00 1 'wanikani from command line 1'
+2022-01-02 10:00:00 1 'wanikani from command line 2'
