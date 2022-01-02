@@ -1,4 +1,5 @@
 // Command line interface for the Beeminder REST API.
+//
 // Allows shell scripting of Beeminder for usecases such as custom goal reminders or adding data
 // points through cron.
 use anyhow::bail;
@@ -207,10 +208,7 @@ async fn main() -> Result<()> {
         Command::Goal(cmd) => match cmd {
             GoalCommand::List => {
                 info!("Retrieving goals from Beeminder");
-                let response = client
-                    .get(url.build(&format!("/goals.json")))
-                    .send()
-                    .await?;
+                let response = client.get(url.build("/goals.json")).send().await?;
                 let goal: Vec<Goal> = response.json().await?;
                 println!("{}", serde_json::to_string(&goal).unwrap());
             }
@@ -243,13 +241,12 @@ async fn main() -> Result<()> {
                 request_id,
             } => {
                 info!("Creating new data point");
-                let mut params = vec![];
-                params.push(("value", value.to_string()));
+                let mut params = vec![("value", value.to_string())];
                 if let Some(t) = timestamp {
                     params.push(("timestamp", t.to_string()));
                 }
                 if let Some(d) = daystamp {
-                    params.push(("daystamp", d.to_string()));
+                    params.push(("daystamp", d));
                 }
                 if let Some(c) = comment {
                     params.push(("comment", c));
