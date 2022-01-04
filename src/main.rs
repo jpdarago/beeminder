@@ -49,7 +49,7 @@ enum DatapointCommand {
 
 #[derive(StructOpt)]
 enum Command {
-    #[structopt(name = "user", about = "Relates to Beeminder user")]
+    #[structopt(name = "user", about = "Relates to a Beeminder user")]
     User,
     #[structopt(name = "goal", about = "Relates to goals of a Beeminder user")]
     Goal(GoalCommand),
