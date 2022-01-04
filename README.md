@@ -46,3 +46,27 @@ Example:
 
 The parser is a simple regex, you can test your inputs
 [here](https://regex101.com/r/46uRAz/1).
+
+# Authentication
+
+The tool requires the username and API tokens.
+
+The username can be provided with the following options, in descending order of
+preference.
+
+- CLI flag `--auth_token`.
+- Environment variable `BEEMINDER_AUTH_TOKEN`.
+- TOML Config file `auth_token` field. The config file is located in `.config/beeminder/beeminder.toml` in Ubuntu.
+
+For the username
+
+- CLI flag `--username`.
+- Environment variable `BEEMINDER_USERNAME`.
+- TOML Config file `username`. The config file is located in `.config/beeminder/beeminder.toml` in Ubuntu.
+
+Example contents of `.config/beeminder/beeminder.toml`:
+
+```toml
+auth_token = "thetoken"
+username = "foobar"
+```
