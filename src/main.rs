@@ -99,19 +99,10 @@ impl BeeminderUrl {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Auth {
     username: Option<String>,
     auth_token: Option<String>,
-}
-
-impl ::std::default::Default for Auth {
-    fn default() -> Self {
-        Self {
-            username: None,
-            auth_token: None,
-        }
-    }
 }
 
 impl Auth {
