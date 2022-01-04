@@ -66,15 +66,15 @@ struct Cli {
     #[structopt(
         short,
         long,
-        about = "Beeminder API token. If unset uses BEEMINDER_API_TOKEN environment variable"
+        about = "Beeminder API token. If unset uses BEEMINDER_AUTH_TOKEN environment variable or Beeminder config file"
     )]
-    token: Option<String>,
+    auth_token: Option<String>,
     #[structopt(
         short,
         long,
-        about = "Beeminder username. If unset uses BEEMINDER_USERNAME environment variable"
+        about = "Beeminder username. If unset uses BEEMINDER_USERNAME environment variable or Beeminder config file"
     )]
-    user: Option<String>,
+    username: Option<String>,
     #[structopt(subcommand)]
     cmd: Command,
 }
@@ -99,25 +99,48 @@ impl BeeminderUrl {
     }
 }
 
-fn get_token(args: &Cli) -> Option<String> {
-    if let Some(token) = &args.token {
-        Some(token.to_string())
-    } else {
-        match std::env::var("BEEMINDER_API_TOKEN") {
-            Ok(val) => Some(val),
-            _ => None,
+#[derive(Serialize, Deserialize, Debug)]
+struct Auth {
+    username: Option<String>,
+    auth_token: Option<String>,
+}
+
+impl ::std::default::Default for Auth {
+    fn default() -> Self {
+        Self {
+            username: None,
+            auth_token: None,
         }
     }
 }
 
-fn get_user(args: &Cli) -> Option<String> {
-    if let Some(user) = &args.user {
-        Some(user.to_string())
-    } else {
-        match std::env::var("BEEMINDER_USERNAME") {
-            Ok(val) => Some(val),
-            _ => None,
+impl Auth {
+    // Load authentication information with the following order of preference, descending:
+    //
+    // - Command line argument (i.e. --username or --auth_token).
+    // - Environment variable (i.e. BEEMINDER_USERNAME).
+    // - Configuration file.
+    fn load(args: &Cli) -> Result<Self> {
+        let token = {
+            if let Some(token) = &args.auth_token {
+                Some(token.to_string())
+            } else {
+                std::env::var("BEEMINDER_AUTH_TOKEN").ok()
+            }
+        };
+        let user = if let Some(user) = &args.username {
+            Some(user.to_string())
+        } else {
+            std::env::var("BEEMINDER_USERNAME").ok()
+        };
+        let mut auth: Auth = confy::load("beeminder")?;
+        if token.is_some() {
+            auth.auth_token = token;
         }
+        if user.is_some() {
+            auth.username = user;
+        }
+        Ok(auth)
     }
 }
 
@@ -194,11 +217,11 @@ fn datapoints_from_stdin(goal: &str) -> Result<Vec<Datapoint>> {
 async fn main() -> Result<()> {
     env_logger::init();
     let args = Cli::from_args();
-    let user = &get_user(&args).expect("Expected Beeminder user");
-    let url = BeeminderUrl::new(
-        user,
-        &get_token(&args).expect("Expected Beeminder API token"),
-    );
+    let auth = Auth::load(&args)?;
+    info!("Authentication information: {:?}", auth);
+    let user = auth.username.expect("No Beeminder user provided.");
+    let token = auth.auth_token.expect("No Beeminder token provided.");
+    let url = BeeminderUrl::new(&user, &token);
     let builder = reqwest::ClientBuilder::new();
     let client = builder.user_agent(APP_USER_AGENT).build()?;
     match args.cmd {
