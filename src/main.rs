@@ -41,8 +41,10 @@ enum DatapointCommand {
         #[structopt(short = "-i", long)]
         request_id: Option<String>,
     },
-    #[structopt(name = "put", about = "Create datapoints from STDIN")]
+    #[structopt(name = "put", about = "Create datapoints from STDIN formatted input.")]
     Put { goal: String },
+    #[structopt(name = "delete", about = "Delete datapoints")]
+    Delete { goal: String, id: String },
 }
 
 #[derive(StructOpt)]
@@ -270,6 +272,13 @@ async fn main() -> Result<()> {
                     .form(&[("datapoints", serde_json::to_string(&points).unwrap())])
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .header(reqwest::header::ACCEPT, "application/json")
+                    .send()
+                    .await?;
+            }
+            DatapointCommand::Delete { goal, id } => {
+                info!("Deleting data point {} for goal {} user {}", id, goal, user);
+                client
+                    .delete(url.build(&format!("/goals/{}/datapoints/{}.json", goal, id)))
                     .send()
                     .await?;
             }
