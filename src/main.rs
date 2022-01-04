@@ -112,7 +112,7 @@ fn get_user(args: &Cli) -> Option<String> {
     if let Some(user) = &args.user {
         Some(user.to_string())
     } else {
-        match std::env::var("BEEMINDER_USER") {
+        match std::env::var("BEEMINDER_USERNAME") {
             Ok(val) => Some(val),
             _ => None,
         }
