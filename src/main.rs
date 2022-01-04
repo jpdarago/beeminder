@@ -194,28 +194,29 @@ fn datapoints_from_stdin(goal: &str) -> Result<Vec<Datapoint>> {
 async fn main() -> Result<()> {
     env_logger::init();
     let args = Cli::from_args();
+    let user = &get_user(&args).expect("Expected Beeminder user");
     let url = BeeminderUrl::new(
-        &get_user(&args).expect("Expected Beeminder user"),
+        user,
         &get_token(&args).expect("Expected Beeminder API token"),
     );
     let builder = reqwest::ClientBuilder::new();
     let client = builder.user_agent(APP_USER_AGENT).build()?;
     match args.cmd {
         Command::User => {
-            info!("Retrieving user data from Beeminder");
+            info!("Retrieving user data for {}", user);
             let response = client.get(url.build(".json")).send().await?;
             let user: User = response.json().await?;
             println!("{}", serde_json::to_string(&user).unwrap());
         }
         Command::Goal(cmd) => match cmd {
             GoalCommand::List => {
-                info!("Retrieving goals from Beeminder");
+                info!("Retrieving goals for user {}", user);
                 let response = client.get(url.build("/goals.json")).send().await?;
                 let goal: Vec<Goal> = response.json().await?;
                 println!("{}", serde_json::to_string(&goal).unwrap());
             }
             GoalCommand::Info { goal } => {
-                info!("Retrieving goal data from Beeminder");
+                info!("Retrieving goal data for goal {} user {}", user, goal);
                 let response = client
                     .get(url.build(&format!("/goals/{}.json", goal)))
                     .send()
@@ -226,7 +227,7 @@ async fn main() -> Result<()> {
         },
         Command::Datapoint(cmd) => match cmd {
             DatapointCommand::List { goal } => {
-                info!("Retrieving datapoint data from Beeminder");
+                info!("Retrieving datapoint data for goal {} user {}", goal, user);
                 let response = client
                     .get(url.build(&format!("/goals/{}/datapoints.json", goal)))
                     .send()
@@ -242,7 +243,7 @@ async fn main() -> Result<()> {
                 comment,
                 request_id,
             } => {
-                info!("Creating new data point");
+                info!("Creating new data point for goal {} user {}", goal, user);
                 let mut params = vec![("value", value.to_string())];
                 if let Some(t) = timestamp {
                     params.push(("timestamp", t.to_string()));
@@ -265,7 +266,10 @@ async fn main() -> Result<()> {
                     .await?;
             }
             DatapointCommand::Put { goal } => {
-                info!("Creating several datapoints");
+                info!(
+                    "Creating datapoints from standard input for goal {} user {}",
+                    goal, user
+                );
                 let points = datapoints_from_stdin(&goal)?;
                 client
                     .post(url.build(&format!("/goals/{}/datapoints/create_all.json", goal)))
