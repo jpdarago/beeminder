@@ -28,9 +28,7 @@ jobs:
           override: true
 
       - name: Build project
-        uses: actions-rs/cargo@v1
-        with:
-          run: cargo build --all --release && strip target/release/beeminder && mv target/release/beeminder target/release/beeminder_amd64
+        run: cargo build --all --release && strip target/release/beeminder && mv target/release/beeminder target/release/beeminder_amd64
 
       - name: Release
         uses: softprops/action-gh-release@v1
