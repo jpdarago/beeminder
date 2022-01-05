@@ -51,7 +51,18 @@ enum DatapointCommand {
             about = "Datapoint Id, so it can be provided for updates later. Optional",
             long
         )]
-        request_id: Option<String>,
+        id: Option<String>,
+    },
+    #[structopt(name = "update", about = "Update datapoint by id")]
+    Update {
+        goal: String,
+        id: String,
+        #[structopt(short = "-v", about = "Datapoint value", long)]
+        value: Option<f64>,
+        #[structopt(short = "-t", about = "Datapoint timestamp as unix seconds", long)]
+        timestamp: Option<u64>,
+        #[structopt(short = "-c", about = "Datapoint comment", long)]
+        comment: Option<String>,
     },
     #[structopt(
         name = "put",
@@ -273,7 +284,7 @@ async fn main() -> Result<()> {
                 timestamp,
                 daystamp,
                 comment,
-                request_id,
+                id,
             } => {
                 info!("Creating new data point for goal {} user {}", goal, user);
                 let mut params = vec![("value", value.to_string())];
@@ -286,11 +297,40 @@ async fn main() -> Result<()> {
                 if let Some(c) = comment {
                     params.push(("comment", c));
                 }
-                if let Some(r) = request_id {
+                if let Some(r) = id {
                     params.push(("requestid", r));
                 }
                 client
                     .post(url.build(&format!("/goals/{}/datapoints.json", goal)))
+                    .form(&params)
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .header(reqwest::header::ACCEPT, "application/json")
+                    .send()
+                    .await?;
+            }
+            DatapointCommand::Update {
+                goal,
+                id,
+                value,
+                timestamp,
+                comment,
+            } => {
+                info!(
+                    "Updating data point for datapoint {} goal {} user {}",
+                    id, goal, user
+                );
+                let mut params = vec![];
+                if let Some(v) = value {
+                    params.push(("value", v.to_string()));
+                }
+                if let Some(t) = timestamp {
+                    params.push(("timestamp", t.to_string()));
+                }
+                if let Some(c) = comment {
+                    params.push(("comment", c));
+                }
+                client
+                    .put(url.build(&format!("/goals/{}/datapoints/{}.json", goal, id)))
                     .form(&params)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .header(reqwest::header::ACCEPT, "application/json")
