@@ -30,32 +30,50 @@ enum DatapointCommand {
     #[structopt(name = "create", about = "Create a datapoint from CLI flags")]
     Create {
         goal: String,
-        #[structopt(short = "-v", long)]
+        #[structopt(short = "-v", about = "Datapoint value. Required", long)]
         value: f64,
-        #[structopt(short = "-t", long)]
+        #[structopt(
+            short = "-t",
+            about = "Datapoint timestamp as unix seconds. Optional, set to now if unset",
+            long
+        )]
         timestamp: Option<u64>,
-        #[structopt(short = "-d", long)]
+        #[structopt(
+            short = "-d",
+            about = "Datapoint day, as YYYYMMDD. Optional, set to now if unset",
+            long
+        )]
         daystamp: Option<String>,
-        #[structopt(short = "-c", long)]
+        #[structopt(short = "-c", about = "Datapoint comment. Optional", long)]
         comment: Option<String>,
-        #[structopt(short = "-i", long)]
+        #[structopt(
+            short = "-i",
+            about = "Datapoint Id, so it can be provided for updates later. Optional",
+            long
+        )]
         request_id: Option<String>,
     },
-    #[structopt(name = "put", about = "Create datapoints from STDIN formatted input.")]
+    #[structopt(
+        name = "put",
+        about = "Create datapoints from STDIN formatted input. See https://github.com/jpdarago/beeminder/blob/main/README.md"
+    )]
     Put { goal: String },
-    #[structopt(name = "delete", about = "Delete datapoints")]
+    #[structopt(name = "delete", about = "Delete datapoint by id")]
     Delete { goal: String, id: String },
 }
 
 #[derive(StructOpt)]
 enum Command {
-    #[structopt(name = "user", about = "Relates to a Beeminder user")]
+    #[structopt(name = "user", about = "Functions related to a Beeminder user")]
     User,
-    #[structopt(name = "goal", about = "Relates to goals of a Beeminder user")]
+    #[structopt(
+        name = "goal",
+        about = "Functions related to Beeminder goals for a user"
+    )]
     Goal(GoalCommand),
     #[structopt(
         name = "datapoint",
-        about = "Related to datapoints of a Beeminder user"
+        about = "Functions related to Beeminder datapoints for a goal"
     )]
     Datapoint(DatapointCommand),
 }
