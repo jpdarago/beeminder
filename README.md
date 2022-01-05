@@ -49,10 +49,12 @@ The parser is a simple regex, you can test your inputs
 
 # Authentication
 
-The tool requires the username and API tokens.
+The tool requires the username and [API authentication token](https://api.beeminder.com/#auth).
 
-The username can be provided with the following options, in descending order of
+The username and API token can be provided with the following options, in descending order of
 preference.
+
+For the token
 
 - CLI flag `--auth_token`.
 - Environment variable `BEEMINDER_AUTH_TOKEN`.
